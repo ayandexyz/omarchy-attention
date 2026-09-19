@@ -197,7 +197,19 @@ Scope {
       // the compositor nothing at all. Shown on the decision, not on the
       // opacity: animations do not advance inside a hidden window, so
       // waiting for the fade-in to start would wait forever.
-      visible: root.shielded || veil.coverage > 0.001
+      //
+      // Hidden a beat *after* the sweep has fully left the screen. The
+      // compositor fades an unmapping layer out using its last buffer, so
+      // unmapping mid-sweep flashes a stale slice of veil back onto the
+      // screen. Lingering a few frames with nothing drawn and an empty blur
+      // region makes that fade invisible.
+      visible: root.shielded || veil.coverage > 0 || panel.lingering
+      property bool lingering: false
+      Timer {
+        id: linger
+        interval: 150
+        onTriggered: panel.lingering = false
+      }
       anchors { top: true; bottom: true; left: true; right: true }
       color: "transparent"
       exclusionMode: ExclusionMode.Ignore
@@ -207,155 +219,135 @@ Scope {
       // Empty input region: clicks and keys go straight through to whatever
       // is underneath, shield or no shield.
       mask: Region {}
-      // In Wayland, compositor blur regions are binary geometric masks (on or off).
-      // Rather than cutting the blur arbitrarily inside a translucent smear (which
-      // created a jarring hard line), the blur region precisely bounds the frosted
-      // glass panel. At the leading edge, an Apple-style material structure is
-      // applied:
-      //   1. A forward-facing ambient drop shadow that softly shades the unblurred screen;
-      //   2. A luminous specular glass highlight line and micro-bevel on the rim;
-      //   3. A subtle inner Fresnel glow that eases into the frosted glass veil.
-      // This turns the boundary into a natural, physically convincing optical glass edge.
+      // Compositor blur regions are binary: a pixel is either blurred or it
+      // is not, so wherever the region ends there is a hard step. It cannot
+      // be feathered, only hidden. The veil is therefore almost opaque
+      // exactly at the crest where the blur begins, and eases out from there
+      // in both directions over a wide spread: down to the resting tint over
+      // the blurred side, down to nothing over the clear side. Every stop
+      // follows a smoothstep curve so there is no ridge and no seam, just a
+      // soft shadow that rolls across the screen.
       readonly property bool sweep: root.settings.directionalSweep
       readonly property real coverage: veil.coverage
-      // Wide spread (35% of the screen, ~450-500px) for an ultra-smooth, luxurious transition
-      readonly property int feather: Math.min(520, Math.max(260, Math.round(panel.width * 0.35)))
+      // Width of the fade on each side of the crest.
+      readonly property int feather: Math.min(640, Math.max(320, Math.round(panel.width * 0.36)))
 
-      // The crest where compositor blur begins.
+      // The crest where compositor blur begins. The sweep travels one feather
+      // past the screen on the far side, so the leading shadow rolls fully
+      // off (or on) instead of snapping away when the crest hits the edge.
+      readonly property int travel: panel.width + panel.feather
       readonly property int crestX: !sweep ? panel.width
-        : root.side > 0 ? Math.round(panel.width * (1.0 - coverage))
-        : Math.round(panel.width * coverage)
+        : root.side > 0 ? Math.round(panel.width + panel.feather - travel * coverage)
+        : Math.round(travel * coverage - panel.feather)
+      // The crest clamped to the screen: the blur region and veil end here.
+      readonly property int veilStart: root.side > 0 ? Math.max(0, Math.min(panel.width, crestX)) : 0
+      readonly property int veilWidth: !sweep ? panel.width
+        : root.side > 0 ? panel.width - veilStart : Math.max(0, Math.min(panel.width, crestX))
 
-      // Base opacity and seamless crest opacity (gentle 15% lift to avoid any visible dark ridge)
       readonly property real baseOpacity: root.settings.veilOpacity
-      readonly property real peakOpacity: Math.min(0.60, baseOpacity * 1.15)
+      // Dense enough that the blur step underneath cannot be seen.
+      readonly property real crestOpacity: 0.94
 
       // Compositor blur region covers the shielded side up to the crest.
       BackgroundEffect.blurRegion: Region {
-        x: !panel.sweep ? 0 : (root.side > 0 ? panel.crestX : 0)
+        x: panel.veilStart
         y: 0
-        width: !panel.sweep ? panel.width : (root.side > 0 ? panel.width - panel.crestX : panel.crestX)
+        width: panel.veilWidth
         height: panel.height
       }
 
-      // Base tint color with subtle Apple luminance lift
-      readonly property color tintColor: Qt.rgba(
-        Math.min(1.0, Color.background.r * 1.15 + 0.03),
-        Math.min(1.0, Color.background.g * 1.15 + 0.03),
-        Math.min(1.0, Color.background.b * 1.15 + 0.03),
-        1
-      )
+      readonly property color tintColor: Color.background
 
-      // 1. Frosted veil covering the blurred region, with a smooth ramp up to the crest.
+      function tint(alpha) {
+        return Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, alpha)
+      }
+      // Smoothstep between two alphas, t in 0..1.
+      function ease(from, to, t) {
+        var k = t * t * (3 - 2 * t)
+        return from + (to - from) * k
+      }
+
+      // 1. The frosted veil over the blurred region. Starts dense at the crest
+      // and settles to the resting tint over one feather width.
       Rectangle {
         id: veil
         property real coverage: root.coverage
         Behavior on coverage {
           SmoothedAnimation { velocity: 1.6; reversingMode: SmoothedAnimation.Sync }
         }
+        onCoverageChanged: {
+          if (coverage > 0) { linger.stop(); panel.lingering = false }
+          else { panel.lingering = true; linger.restart() }
+        }
 
         y: 0
         height: panel.height
-        x: !panel.sweep ? 0 : (root.side > 0 ? panel.crestX : 0)
-        width: !panel.sweep ? panel.width : (root.side > 0 ? panel.width - panel.crestX : panel.crestX)
+        x: panel.veilStart
+        width: panel.veilWidth
         visible: width > 0
 
         gradient: panel.sweep && width > 0 ? blurSideGradient : null
         color: !panel.sweep ? panel.tintColor : "transparent"
         opacity: !panel.sweep ? panel.coverage * panel.baseOpacity : 1.0
 
+        // Fraction of the veil taken by the fade, in gradient space.
+        readonly property real span: Math.min(1.0, panel.feather / Math.max(1, veil.width))
+        // Stops are listed left to right (Qt wants ascending positions), so
+        // `t` is the distance from the crest as a fraction of the fade: it
+        // runs 0..1 left to right when the crest is on the left, 1..0 when
+        // it is on the right.
+        readonly property var ts: [0, 0.15, 0.30, 0.45, 0.60, 0.80, 1.0]
+        function pos(i) { return root.side > 0 ? veil.ts[i] * span : 1.0 - veil.ts[6 - i] * span }
+        function alpha(i) {
+          var t = root.side > 0 ? veil.ts[i] : veil.ts[6 - i]
+          return panel.tint(panel.ease(panel.crestOpacity, panel.baseOpacity, t))
+        }
+
         Gradient {
           id: blurSideGradient
           orientation: Gradient.Horizontal
-
-          GradientStop {
-            position: 0.0
-            color: root.side > 0
-              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity)
-              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.baseOpacity)
-          }
-          GradientStop {
-            position: root.side > 0
-              ? Math.min(1.0, (panel.feather * 0.7) / Math.max(1, veil.width))
-              : Math.max(0.0, 1.0 - (panel.feather * 0.7) / Math.max(1, veil.width))
-            color: Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.baseOpacity)
-          }
-          GradientStop {
-            position: 1.0
-            color: root.side > 0
-              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.baseOpacity)
-              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity)
-          }
+          GradientStop { position: 0.0; color: root.side > 0 ? panel.tint(panel.crestOpacity) : panel.tint(panel.baseOpacity) }
+          GradientStop { position: veil.pos(0); color: veil.alpha(0) }
+          GradientStop { position: veil.pos(1); color: veil.alpha(1) }
+          GradientStop { position: veil.pos(2); color: veil.alpha(2) }
+          GradientStop { position: veil.pos(3); color: veil.alpha(3) }
+          GradientStop { position: veil.pos(4); color: veil.alpha(4) }
+          GradientStop { position: veil.pos(5); color: veil.alpha(5) }
+          GradientStop { position: veil.pos(6); color: veil.alpha(6) }
+          GradientStop { position: 1.0; color: root.side > 0 ? panel.tint(panel.baseOpacity) : panel.tint(panel.crestOpacity) }
         }
       }
 
-      // 2. The leading feather (outside the blur region, over the unblurred desktop).
-      // Smoothly rolls from peakOpacity at crestX down to 0.0 across a wide spread.
+      // 2. The leading shadow over the clear side. Dense at the crest, gone
+      // one feather width away.
       Rectangle {
         id: leadingWave
-        visible: panel.sweep && panel.crestX > 0 && panel.crestX < panel.width
+        visible: panel.sweep && veil.coverage > 0 && veil.coverage < 1
         y: 0
         height: panel.height
         width: panel.feather
-        x: root.side > 0
-          ? Math.max(0, panel.crestX - panel.feather)
-          : panel.crestX
+        x: root.side > 0 ? panel.crestX - panel.feather : panel.crestX
 
-        gradient: Gradient {
-          orientation: Gradient.Horizontal
-          GradientStop {
-            position: 0.0
-            color: root.side > 0
-              ? "transparent"
-              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity)
-          }
-          GradientStop {
-            position: 0.20
-            color: root.side > 0
-              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.05)
-              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.78)
-          }
-          GradientStop {
-            position: 0.45
-            color: root.side > 0
-              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.22)
-              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.52)
-          }
-          GradientStop {
-            position: 0.70
-            color: root.side > 0
-              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.52)
-              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.22)
-          }
-          GradientStop {
-            position: 0.88
-            color: root.side > 0
-              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.78)
-              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.05)
-          }
-          GradientStop {
-            position: 1.0
-            color: root.side > 0
-              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity)
-              : "transparent"
-          }
+        // Distance from the crest as a fraction of the fade, for the stop at
+        // position `p`. The crest is on the right when sweeping from the right.
+        function alpha(p) {
+          var t = root.side > 0 ? 1.0 - p : p
+          return panel.tint(panel.ease(panel.crestOpacity, 0, t))
         }
-      }
 
-      // 3. Apple-style soft accent sweep glow (diffused atmospheric ribbon across crestX).
-      Rectangle {
-        id: accentGlow
-        visible: panel.sweep && panel.crestX > 0 && panel.crestX < panel.width
-        y: 0
-        height: panel.height
-        width: 120
-        x: panel.crestX - 60
-        opacity: Math.min(1.0, panel.coverage * 3.0) * 0.08
         gradient: Gradient {
           orientation: Gradient.Horizontal
-          GradientStop { position: 0.0; color: "transparent" }
-          GradientStop { position: 0.5; color: Color.accent }
-          GradientStop { position: 1.0; color: "transparent" }
+          GradientStop { position: 0.0; color: leadingWave.alpha(0.0) }
+          GradientStop { position: 0.1; color: leadingWave.alpha(0.1) }
+          GradientStop { position: 0.2; color: leadingWave.alpha(0.2) }
+          GradientStop { position: 0.3; color: leadingWave.alpha(0.3) }
+          GradientStop { position: 0.4; color: leadingWave.alpha(0.4) }
+          GradientStop { position: 0.5; color: leadingWave.alpha(0.5) }
+          GradientStop { position: 0.6; color: leadingWave.alpha(0.6) }
+          GradientStop { position: 0.7; color: leadingWave.alpha(0.7) }
+          GradientStop { position: 0.8; color: leadingWave.alpha(0.8) }
+          GradientStop { position: 0.9; color: leadingWave.alpha(0.9) }
+          GradientStop { position: 1.0; color: leadingWave.alpha(1.0) }
         }
       }
     }

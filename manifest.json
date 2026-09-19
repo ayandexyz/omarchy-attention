@@ -38,7 +38,7 @@
       "absentShields": true,
       "absentDwellMs": 2000,
       "suspendFullscreen": true,
-      "veilOpacity": 0.92,
+      "veilOpacity": 0.48,
       "directionalSweep": true,
       "snoozeSeconds": 300
     },
@@ -120,7 +120,7 @@
         "min": 0.2,
         "max": 1,
         "step": 0.02,
-        "defaultValue": 0.92
+        "defaultValue": 0.48
       },
       {
         "key": "directionalSweep",

@@ -37,9 +37,9 @@ var DEFAULTS = {
   staleMs: 1500,
   // Do not shield over a fullscreen window: presentations, films, games.
   suspendFullscreen: true,
-  // How opaque the veil is at rest. With compositor blur this can sit lower;
-  // without it, this alone is what hides the screen.
-  veilOpacity: 0.92,
+  // How opaque the veil is at rest. With compositor blur this sits at an
+  // airy frosted glass level (~0.48) rather than a dense, heavy dark wall.
+  veilOpacity: 0.48,
   // Sweep the veil in from the side you turned toward (and back out the same
   // way), rather than a flat fade.
   directionalSweep: true,

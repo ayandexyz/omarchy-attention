@@ -218,65 +218,37 @@ Scope {
       // This turns the boundary into a natural, physically convincing optical glass edge.
       readonly property bool sweep: root.settings.directionalSweep
       readonly property real coverage: veil.coverage
-      readonly property real shadowWidth: Math.min(48, Math.round(panel.width * 0.035))
+      // Wide spread (35% of the screen, ~450-500px) for an ultra-smooth, luxurious transition
+      readonly property int feather: Math.min(520, Math.max(260, Math.round(panel.width * 0.35)))
 
-      // The frosted glass panel bounds. The blur region precisely matches
-      // the physical glass pane, while a specular rim and soft ambient shadow
-      // eliminate the raw blur cut and produce a smooth, Apple-like frosted
-      // glass sweep.
-      readonly property int glassLeft: !sweep ? 0
+      // The crest where compositor blur begins.
+      readonly property int crestX: !sweep ? panel.width
         : root.side > 0 ? Math.round(panel.width * (1.0 - coverage))
-        : 0
-      readonly property int glassRight: !sweep ? panel.width
-        : root.side > 0 ? panel.width
         : Math.round(panel.width * coverage)
-      readonly property int glassWidth: Math.max(0, glassRight - glassLeft)
 
-      // Compositor blur region covers the entire frosted glass pane.
+      // Base opacity and seamless crest opacity (gentle 15% lift to avoid any visible dark ridge)
+      readonly property real baseOpacity: root.settings.veilOpacity
+      readonly property real peakOpacity: Math.min(0.60, baseOpacity * 1.15)
+
+      // Compositor blur region covers the shielded side up to the crest.
       BackgroundEffect.blurRegion: Region {
-        x: panel.glassLeft
+        x: !panel.sweep ? 0 : (root.side > 0 ? panel.crestX : 0)
         y: 0
-        width: panel.glassWidth
+        width: !panel.sweep ? panel.width : (root.side > 0 ? panel.width - panel.crestX : panel.crestX)
         height: panel.height
       }
 
-      // 1. Ambient drop shadow cast forward onto the unblurred desktop.
-      // Extends outside the glass pane to create depth and soften the visual lead.
-      Rectangle {
-        id: ambientShadow
-        visible: panel.sweep && panel.glassWidth > 0 && panel.coverage < 0.999
-        y: 0
-        height: panel.height
-        width: panel.shadowWidth
-        x: root.side > 0
-          ? Math.max(0, panel.glassLeft - panel.shadowWidth)
-          : panel.glassRight
-        opacity: Math.min(1.0, panel.coverage * 3.0) * root.settings.veilOpacity
-        gradient: Gradient {
-          orientation: Gradient.Horizontal
-          GradientStop {
-            position: 0.0
-            color: root.side > 0 ? "transparent" : Qt.rgba(0, 0, 0, 0.35)
-          }
-          GradientStop {
-            position: 0.35
-            color: root.side > 0 ? Qt.rgba(0, 0, 0, 0.08) : Qt.rgba(0, 0, 0, 0.20)
-          }
-          GradientStop {
-            position: 0.70
-            color: root.side > 0 ? Qt.rgba(0, 0, 0, 0.20) : Qt.rgba(0, 0, 0, 0.08)
-          }
-          GradientStop {
-            position: 1.0
-            color: root.side > 0 ? Qt.rgba(0, 0, 0, 0.35) : "transparent"
-          }
-        }
-      }
+      // Base tint color with subtle Apple luminance lift
+      readonly property color tintColor: Qt.rgba(
+        Math.min(1.0, Color.background.r * 1.15 + 0.03),
+        Math.min(1.0, Color.background.g * 1.15 + 0.03),
+        Math.min(1.0, Color.background.b * 1.15 + 0.03),
+        1
+      )
 
-      // 2. The frosted glass veil itself (inside the blur region).
+      // 1. Frosted veil covering the blurred region, with a smooth ramp up to the crest.
       Rectangle {
         id: veil
-        readonly property color tint: Qt.rgba(Color.background.r, Color.background.g, Color.background.b, 1)
         property real coverage: root.coverage
         Behavior on coverage {
           SmoothedAnimation { velocity: 1.6; reversingMode: SmoothedAnimation.Sync }
@@ -284,60 +256,106 @@ Scope {
 
         y: 0
         height: panel.height
-        x: panel.glassLeft
-        width: panel.glassWidth
-        opacity: panel.sweep ? root.settings.veilOpacity : coverage * root.settings.veilOpacity
-        color: tint
+        x: !panel.sweep ? 0 : (root.side > 0 ? panel.crestX : 0)
+        width: !panel.sweep ? panel.width : (root.side > 0 ? panel.width - panel.crestX : panel.crestX)
+        visible: width > 0
 
-        // Subtle inner Fresnel specular gradient near the leading edge
-        Rectangle {
-          id: innerGlow
-          visible: panel.sweep && panel.glassWidth > 0
-          y: 0
-          height: parent.height
-          width: Math.min(36, panel.glassWidth)
-          x: root.side > 0 ? 0 : parent.width - width
-          gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop {
-              position: 0.0
-              color: root.side > 0 ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-            }
-            GradientStop {
-              position: 1.0
-              color: root.side > 0 ? "transparent" : Qt.rgba(1, 1, 1, 0.12)
-            }
+        gradient: panel.sweep && width > 0 ? blurSideGradient : null
+        color: !panel.sweep ? panel.tintColor : "transparent"
+        opacity: !panel.sweep ? panel.coverage * panel.baseOpacity : 1.0
+
+        Gradient {
+          id: blurSideGradient
+          orientation: Gradient.Horizontal
+
+          GradientStop {
+            position: 0.0
+            color: root.side > 0
+              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity)
+              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.baseOpacity)
+          }
+          GradientStop {
+            position: root.side > 0
+              ? Math.min(1.0, (panel.feather * 0.7) / Math.max(1, veil.width))
+              : Math.max(0.0, 1.0 - (panel.feather * 0.7) / Math.max(1, veil.width))
+            color: Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.baseOpacity)
+          }
+          GradientStop {
+            position: 1.0
+            color: root.side > 0
+              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.baseOpacity)
+              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity)
           }
         }
+      }
 
-        // 3. Apple-style specular glass rim at the leading edge.
-        // A luminous highlight line paired with a subtle contrast bevel gives
-        // the glass a physical, polished optical boundary.
-        Item {
-          id: glassRim
-          visible: panel.sweep && panel.glassWidth > 0 && panel.coverage < 0.999
-          y: 0
-          height: parent.height
-          width: 3
-          x: root.side > 0 ? 0 : parent.width - width
+      // 2. The leading feather (outside the blur region, over the unblurred desktop).
+      // Smoothly rolls from peakOpacity at crestX down to 0.0 across a wide spread.
+      Rectangle {
+        id: leadingWave
+        visible: panel.sweep && panel.crestX > 0 && panel.crestX < panel.width
+        y: 0
+        height: panel.height
+        width: panel.feather
+        x: root.side > 0
+          ? Math.max(0, panel.crestX - panel.feather)
+          : panel.crestX
 
-          // Soft micro-shadow bevel
-          Rectangle {
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: 1
-            x: root.side > 0 ? 0 : 2
-            color: Qt.rgba(0, 0, 0, 0.28)
+        gradient: Gradient {
+          orientation: Gradient.Horizontal
+          GradientStop {
+            position: 0.0
+            color: root.side > 0
+              ? "transparent"
+              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity)
           }
-
-          // Luminous specular reflection highlight
-          Rectangle {
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: 1.5
-            x: root.side > 0 ? 1 : 0
-            color: Qt.rgba(1, 1, 1, 0.35)
+          GradientStop {
+            position: 0.20
+            color: root.side > 0
+              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.05)
+              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.78)
           }
+          GradientStop {
+            position: 0.45
+            color: root.side > 0
+              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.22)
+              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.52)
+          }
+          GradientStop {
+            position: 0.70
+            color: root.side > 0
+              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.52)
+              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.22)
+          }
+          GradientStop {
+            position: 0.88
+            color: root.side > 0
+              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.78)
+              : Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity * 0.05)
+          }
+          GradientStop {
+            position: 1.0
+            color: root.side > 0
+              ? Qt.rgba(panel.tintColor.r, panel.tintColor.g, panel.tintColor.b, panel.peakOpacity)
+              : "transparent"
+          }
+        }
+      }
+
+      // 3. Apple-style soft accent sweep glow (diffused atmospheric ribbon across crestX).
+      Rectangle {
+        id: accentGlow
+        visible: panel.sweep && panel.crestX > 0 && panel.crestX < panel.width
+        y: 0
+        height: panel.height
+        width: 120
+        x: panel.crestX - 60
+        opacity: Math.min(1.0, panel.coverage * 3.0) * 0.08
+        gradient: Gradient {
+          orientation: Gradient.Horizontal
+          GradientStop { position: 0.0; color: "transparent" }
+          GradientStop { position: 0.5; color: Color.accent }
+          GradientStop { position: 1.0; color: "transparent" }
         }
       }
     }

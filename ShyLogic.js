@@ -32,6 +32,9 @@ var DEFAULTS = {
   // How opaque the veil is at rest. With compositor blur this can sit lower;
   // without it, this alone is what hides the screen.
   veilOpacity: 0.92,
+  // Sweep the veil in from the side you turned toward (and back out the same
+  // way), rather than a flat fade.
+  directionalSweep: true,
   snoozeSeconds: 300
 }
 
@@ -56,6 +59,7 @@ function normalizeSettings(raw) {
   s.staleMs = clamp(raw.staleMs, 500, 10000, DEFAULTS.staleMs)
   s.suspendFullscreen = raw.suspendFullscreen === undefined ? DEFAULTS.suspendFullscreen : !!raw.suspendFullscreen
   s.veilOpacity = clamp(raw.veilOpacity, 0.2, 1, DEFAULTS.veilOpacity)
+  s.directionalSweep = raw.directionalSweep === undefined ? DEFAULTS.directionalSweep : !!raw.directionalSweep
   s.snoozeSeconds = clamp(raw.snoozeSeconds, 10, 86400, DEFAULTS.snoozeSeconds)
   return s
 }

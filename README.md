@@ -27,6 +27,9 @@ your screen is a frosted blur until you turn back.
 - **Works without enrolling.** Attention mode uses only the landmarker. You do
   not need to have enrolled a face, armed the daemon, or touched PAM. Anyone
   with a webcam can run this.
+- **Directional.** Turn left and the veil sweeps in from the right edge —
+  the side you turned toward — and slides back out the same way when you
+  look back. A setting turns it into a plain fade.
 - **Cheap.** The daemon runs the landmarker at 8 fps only while the shield is
   subscribed: about 8% of one core, camera included. The veil is unmapped
   while idle, so it costs the compositor nothing.
@@ -96,7 +99,7 @@ unless you turn that off.
 
 **Settings** (bar widget settings): shield angle, clear angle, dwell before
 shielding, delay before clearing, whether an empty chair counts, veil opacity,
-snooze length. The two angles are a hysteresis band: you must turn past 30°
+snooze length, directional sweep. The two angles are a hysteresis band: you must turn past 30°
 to shield and come back within 18° to clear, so a glance at the keyboard does
 not flicker.
 

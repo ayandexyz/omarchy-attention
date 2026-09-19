@@ -47,6 +47,17 @@ Scope {
   readonly property string suspended: snoozed ? "snoozed"
     : (settings.suspendFullscreen && fullscreenFocused ? "fullscreen" : "")
   readonly property bool shielded: covered || (enabled && suspended === "" && state.shielded)
+  // Which edge the veil sweeps in from: +1 the right edge (you turned left),
+  // -1 the left edge. Decided when the shield goes up and held until it is
+  // fully down, so the veil leaves the way it came. With no face to read, the
+  // last side you were seen turning toward.
+  property int side: 1
+  property int lastTurn: 1
+  onShieldedChanged: if (shielded) root.side = root.turnSide()
+  function turnSide() {
+    if (root.state.yaw === null) return root.lastTurn
+    return (root.state.yaw - root.offset) < 0 ? -1 : 1
+  }
   readonly property string label: covered ? "covered" : Shy.describe(state, enabled, suspended)
   readonly property string severity: Shy.severity(state, enabled, suspended)
 
@@ -105,6 +116,8 @@ Scope {
         var event = Shy.parseEvent(data)
         if (event === null) return
         root.state = Shy.step(root.state, event, Date.now(), root.settings, root.offset)
+        if (event.yaw !== null && Math.abs(event.yaw - root.offset) > 5)
+          root.lastTurn = (event.yaw - root.offset) < 0 ? -1 : 1
       }
     }
     onConnectedChanged: {
@@ -148,7 +161,7 @@ Scope {
         enabled: root.enabled, shielded: root.shielded, suspended: root.suspended,
         daemon: root.state.daemon, present: root.state.present,
         yaw: root.state.yaw, pitch: root.state.pitch, offset: root.offset, label: root.label,
-        socket: root.socketPath, fullscreen: root.fullscreenFocused, settings: root.settings,
+        socket: root.socketPath, fullscreen: root.fullscreenFocused, settings: root.settings, side: root.side, lastTurn: root.lastTurn,
         activeToplevel: ToplevelManager.activeToplevel ? ToplevelManager.activeToplevel.title : null
       })
     }
@@ -166,7 +179,7 @@ Scope {
       // the compositor nothing at all. Shown on the decision, not on the
       // opacity: animations do not advance inside a hidden window, so
       // waiting for the fade-in to start would wait forever.
-      visible: root.shielded || veil.opacity > 0.001
+      visible: root.shielded || veil.coverage > 0.001
       anchors { top: true; bottom: true; left: true; right: true }
       color: "transparent"
       exclusionMode: ExclusionMode.Ignore
@@ -181,15 +194,39 @@ Scope {
       // opacity does the hiding.
       BackgroundEffect.blurRegion: Region { item: veil }
 
+      // The veil is wider than the screen by a feathered edge and slides
+      // across it: turn left and it sweeps in from the right, then retreats
+      // back out the same way when you turn back. With `directionalSweep`
+      // off it is a plain fade instead.
       Rectangle {
         id: veil
-        anchors.fill: parent
-        // The theme colour may carry alpha of its own; the veil's opacity is
-        // the one knob, so flatten it.
-        color: Qt.rgba(Color.background.r, Color.background.g, Color.background.b, 1)
-        opacity: root.shielded ? root.settings.veilOpacity : 0
-        Behavior on opacity {
-          NumberAnimation { duration: 350; easing.type: Easing.InOutQuad }
+        readonly property color tint: Qt.rgba(Color.background.r, Color.background.g, Color.background.b, 1)
+        readonly property bool sweep: root.settings.directionalSweep
+        // Soft edge, as a fraction of the screen width.
+        readonly property real feather: 0.35
+        readonly property real featherStop: feather / (1 + feather)
+        property real coverage: root.shielded ? 1 : 0
+        Behavior on coverage {
+          NumberAnimation { duration: veil.sweep ? 550 : 350; easing.type: Easing.InOutCubic }
+        }
+
+        height: parent.height
+        width: sweep ? parent.width * (1 + feather) : parent.width
+        x: !sweep ? 0
+          : root.side > 0 ? parent.width - coverage * width   // in from the right
+          : coverage * width - width                          // in from the left
+        opacity: sweep ? root.settings.veilOpacity : coverage * root.settings.veilOpacity
+        color: sweep ? "transparent" : tint
+        gradient: sweep ? sweepGradient : null
+
+        Gradient {
+          id: sweepGradient
+          orientation: Gradient.Horizontal
+          // Leading edge is soft, trailing side is solid — whichever way it faces.
+          GradientStop { position: 0; color: root.side > 0 ? "transparent" : veil.tint }
+          GradientStop { position: veil.featherStop; color: root.side > 0 ? veil.tint : veil.tint }
+          GradientStop { position: 1 - veil.featherStop; color: root.side > 0 ? veil.tint : veil.tint }
+          GradientStop { position: 1; color: root.side > 0 ? veil.tint : "transparent" }
         }
       }
     }

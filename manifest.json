@@ -37,6 +37,7 @@
       "absentDwellMs": 2000,
       "suspendFullscreen": true,
       "veilOpacity": 0.92,
+      "directionalSweep": true,
       "snoozeSeconds": 300
     },
     "schema": [
@@ -111,6 +112,13 @@
         "max": 1,
         "step": 0.02,
         "defaultValue": 0.92
+      },
+      {
+        "key": "directionalSweep",
+        "type": "boolean",
+        "label": "Sweep in from the side you turned toward",
+        "description": "Turn left and the veil slides in from the right edge, then slides back out the same way. Off gives a plain fade.",
+        "defaultValue": true
       },
       {
         "key": "snoozeSeconds",

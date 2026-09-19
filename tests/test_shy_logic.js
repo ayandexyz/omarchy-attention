@@ -62,6 +62,8 @@ test("settings: defaults fill gaps, exit always sits inside enter", () => {
   const inverted = S.normalizeSettings({ enterAngle: 20, exitAngle: 40 })
   assert.strictEqual(inverted.exitAngle, 15)
   assert.strictEqual(S.normalizeSettings({ absentShields: false }).absentShields, false)
+  assert.strictEqual(S.normalizeSettings({}).directionalSweep, true)
+  assert.strictEqual(S.normalizeSettings({ directionalSweep: false }).directionalSweep, false)
 })
 
 test("facing the screen never shields", () => {

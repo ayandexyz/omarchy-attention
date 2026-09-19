@@ -10,7 +10,7 @@ const assert = require("assert")
 
 const source = fs.readFileSync(path.join(__dirname, "..", "ShyLogic.js"), "utf8")
   .replace(/^\.pragma library\s*$/m, "")
-const S = vm.runInNewContext(source + "\n;({ DEFAULTS, normalizeSettings, parseEvent, initial, classify, step, tick, disconnected, describe, severity })")
+const S = vm.runInNewContext(source + "\n;({ DEFAULTS, normalizeSettings, parseEvent, initial, classify, step, tick, disconnected, describe, severity, coverageFor })")
 
 const tests = []
 function test(name, fn) { tests.push([name, fn]) }
@@ -108,9 +108,9 @@ test("recentre offset moves the zero", () => {
   // Camera off to the side: the user's neutral is 25°.
   const { state } = run([[25, 3000]], { offset: 25 })
   assert.strictEqual(state.shielded, false)
-  const turned = run([[60, 3000]], { offset: 25 })
+  const turned = run([[65, 3000]], { offset: 25 })
   assert.strictEqual(turned.state.shielded, true)
-  const other = run([[-10, 3000]], { offset: 25 })
+  const other = run([[-15, 3000]], { offset: 25 })
   assert.strictEqual(other.state.shielded, true)
 })
 
@@ -194,6 +194,54 @@ test("labels", () => {
   const watching = run([[0, 1000]]).state
   assert.strictEqual(S.describe(watching, true, ""), "watching")
   assert.strictEqual(S.severity(watching, true, ""), "idle")
+})
+
+test("coverage: zero in the comfort zone, one past the full angle, smooth between", () => {
+  assert.strictEqual(S.coverageFor(0, settings), 0)
+  assert.strictEqual(S.coverageFor(settings.exitAngle, settings), 0)
+  assert.strictEqual(S.coverageFor(-settings.exitAngle, settings), 0)
+  assert.strictEqual(S.coverageFor(settings.enterAngle, settings), 1)
+  assert.strictEqual(S.coverageFor(-80, settings), 1)
+  const mid = S.coverageFor((settings.exitAngle + settings.enterAngle) / 2, settings)
+  assert.ok(mid > 0.45 && mid < 0.55, `midpoint ${mid}`)
+  const quarter = S.coverageFor(settings.exitAngle + (settings.enterAngle - settings.exitAngle) / 4, settings)
+  assert.ok(quarter > 0 && quarter < 0.2, `quarter ${quarter}`)
+})
+
+test("gradual: coverage follows a smoothed head, out and back", () => {
+  let state = S.initial()
+  const seen = []
+  for (const yaw of [0, 25, 25, 25, 25, 25, 25, 0, 0, 0, 0, 0, 0]) {
+    state = S.step(state, ev({ yaw }), 1000, settings, 0)
+    seen.push(state.coverage)
+  }
+  // Holding at 25° (midway) settles near half, then returns to zero.
+  assert.ok(seen[6] > 0.4 && seen[6] < 0.6, `settled ${seen[6]}`)
+  assert.ok(seen[1] < seen[6], "smoothing: first reading undershoots")
+  assert.strictEqual(seen[12], 0)
+})
+
+test("gradual: a committed shield holds full coverage until the exit angle", () => {
+  const { state } = run([[60, 2000], [25, 1000]])
+  assert.strictEqual(state.shielded, true)
+  assert.strictEqual(state.coverage, 1)
+})
+
+test("switch mode: coverage is 0 or 1 only", () => {
+  const s = S.normalizeSettings({ gradual: false })
+  let state = S.initial()
+  state = S.step(state, ev({ yaw: 25 }), 1000, s, 0)
+  assert.strictEqual(state.coverage, 0)
+  const up = run([[60, 2000]], { settings: s }).state
+  assert.strictEqual(up.coverage, 1)
+})
+
+test("absence and non-tracking states set coverage whole or none", () => {
+  const absent = ev({ present: false, yaw: null })
+  const { state } = run([[0, 1000], [absent, 4000]])
+  assert.strictEqual(state.coverage, 1)
+  const paused = S.step(state, ev({ state: "paused", present: false, yaw: null }), 99999, settings, 0)
+  assert.strictEqual(paused.coverage, 0)
 })
 
 let failed = 0

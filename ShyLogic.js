@@ -10,11 +10,19 @@
 var SCHEMA_VERSION = 1
 
 var DEFAULTS = {
-  // Degrees of head turn, relative to the recentre offset, that put the
-  // shield up ... and the smaller angle you must come back inside to take it
-  // down. The gap is what stops a glance at the keyboard from flickering.
-  enterAngle: 30,
-  exitAngle: 18,
+  // Degrees of head turn, relative to the recentre offset. Inside `exitAngle`
+  // is the comfort zone: nothing happens. Past `enterAngle` the screen is
+  // fully covered. Between the two is the transition: in gradual mode the
+  // veil advances in proportion to how far you have turned, ShyGlass-style,
+  // so it softens as you turn rather than snapping. In switch mode the pair
+  // is a plain hysteresis band with a dwell.
+  enterAngle: 35,
+  exitAngle: 15,
+  gradual: true,
+  // Exponential smoothing on yaw before it drives the veil, 0..1: how much of
+  // each new 8 fps reading to take. Landmarker jitter is a degree or two;
+  // this keeps it from shimmering the veil's edge.
+  yawSmoothing: 0.5,
   // How long the head must stay turned before the shield engages, and how
   // long it must be back before it clears. Engaging is the slow direction.
   dwellMs: 350,
@@ -52,6 +60,8 @@ function normalizeSettings(raw) {
   s.enterAngle = clamp(raw.enterAngle, 5, 80, DEFAULTS.enterAngle)
   s.exitAngle = clamp(raw.exitAngle, 2, 80, DEFAULTS.exitAngle)
   if (s.exitAngle >= s.enterAngle) s.exitAngle = Math.max(2, s.enterAngle - 5)
+  s.gradual = raw.gradual === undefined ? DEFAULTS.gradual : !!raw.gradual
+  s.yawSmoothing = clamp(raw.yawSmoothing, 0.05, 1, DEFAULTS.yawSmoothing)
   s.dwellMs = clamp(raw.dwellMs, 0, 5000, DEFAULTS.dwellMs)
   s.releaseMs = clamp(raw.releaseMs, 0, 5000, DEFAULTS.releaseMs)
   s.absentShields = raw.absentShields === undefined ? DEFAULTS.absentShields : !!raw.absentShields
@@ -96,8 +106,23 @@ function initial() {
     reason: "",
     present: false,
     yaw: null,
-    pitch: null
+    pitch: null,
+    // Smoothed yaw, and how much of the screen the veil should cover, 0..1.
+    smoothYaw: null,
+    coverage: 0
   }
+}
+
+// How far across the screen the veil should be for a head turned `turned`
+// degrees from centre: 0 inside the comfort zone, 1 past the full angle, a
+// smoothstep between. Symmetric, so it is the same curve either side.
+function coverageFor(turned, settings) {
+  var span = settings.enterAngle - settings.exitAngle
+  if (span <= 0) return Math.abs(turned) > settings.enterAngle ? 1 : 0
+  var t = (Math.abs(turned) - settings.exitAngle) / span
+  if (t <= 0) return 0
+  if (t >= 1) return 1
+  return t * t * (3 - 2 * t)
 }
 
 function copy(state) {
@@ -127,17 +152,35 @@ function step(state, event, nowMs, settings, offset) {
   next.present = event.present
   next.yaw = event.yaw
   next.pitch = event.pitch
+  if (event.yaw === null) next.smoothYaw = null
+  else if (state.smoothYaw === null) next.smoothYaw = event.yaw
+  else next.smoothYaw = state.smoothYaw + (event.yaw - state.smoothYaw) * settings.yawSmoothing
 
   var where = classify(event, state.shielded, settings, offset)
   if (where === "unknown") {
     // Not tracking: the shield never stays up on stale knowledge.
     next.shielded = false
+    next.coverage = 0
     next.awaySince = null
     next.backSince = null
     return next
   }
   if (where === "absent" && !settings.absentShields) where = "back"
 
+  var stepped = _advance(next, where, nowMs, settings)
+  stepped.coverage = _coverage(stepped, where, settings, offset)
+  return stepped
+}
+
+function _coverage(state, where, settings, offset) {
+  // An empty chair, or switch mode: the dwell/hysteresis verdict, whole.
+  if (!settings.gradual || where === "absent" || state.smoothYaw === null) return state.shielded ? 1 : 0
+  // Gradual: follow the head. The hysteresis verdict still wins once it has
+  // committed, so a fully turned head does not flicker at the top end.
+  return Math.max(coverageFor(state.smoothYaw - (offset || 0), settings), state.shielded ? 1 : 0)
+}
+
+function _advance(next, where, nowMs, settings) {
   if (where === "back") {
     next.awaySince = null
     if (next.shielded) {
@@ -171,6 +214,7 @@ function tick(state, nowMs, settings) {
   var next = copy(state)
   next.daemon = "stale"
   next.shielded = false
+  next.coverage = 0
   next.awaySince = null
   next.backSince = null
   return next
@@ -196,6 +240,7 @@ function describe(state, enabled, suspended) {
     case "error": return "camera unavailable"
     case "tracking":
       if (state.shielded) return state.present ? "shielded — looking away" : "shielded — nobody there"
+      if (state.coverage > 0) return "shielding " + Math.round(state.coverage * 100) + "%"
       return state.present ? "watching" : "no face in view"
   }
   return state.daemon
@@ -206,7 +251,7 @@ function describe(state, enabled, suspended) {
 function severity(state, enabled, suspended) {
   if (!enabled) return "off"
   if (suspended) return "idle"
-  if (state.daemon === "tracking") return state.shielded ? "on" : "idle"
+  if (state.daemon === "tracking") return state.shielded || state.coverage >= 0.5 ? "on" : "idle"
   if (state.daemon === "starting" || state.daemon === "paused") return "idle"
   return "problem"
 }

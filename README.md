@@ -27,9 +27,11 @@ your screen is a frosted blur until you turn back.
 - **Works without enrolling.** Attention mode uses only the landmarker. You do
   not need to have enrolled a face, armed the daemon, or touched PAM. Anyone
   with a webcam can run this.
-- **Directional.** Turn left and the veil sweeps in from the right edge —
-  the side you turned toward — and slides back out the same way when you
-  look back. A setting turns it into a plain fade.
+- **Proportional and directional.** Inside a 15° comfort zone nothing
+  happens. Past it the veil comes in from the side you turned toward, and
+  advances with your head — half turned, half covered — until at 35° the
+  screen is fully covered. Turn back and it recedes the same way. The motion
+  is velocity-smoothed, so it follows you rather than snapping.
 - **Cheap.** The daemon runs the landmarker at 8 fps only while the shield is
   subscribed: about 8% of one core, camera included. The veil is unmapped
   while idle, so it costs the compositor nothing.
@@ -51,8 +53,9 @@ Then the plugin:
 omarchy plugin add https://github.com/ayandexyz/omarchy-shy.git --enable
 ```
 
-An eye appears in the bar. Turn your head 30° for a third of a second and
-the veil goes up. Turn back and it clears.
+An eye appears in the bar. Turn your head past 15° and the veil starts to
+come in from that side; by 35° the screen is covered. Turn back and it
+recedes.
 
 ### Blur
 
@@ -97,11 +100,12 @@ remembered.
 also never engages over a fullscreen window — presentations, films, games —
 unless you turn that off.
 
-**Settings** (bar widget settings): shield angle, clear angle, dwell before
-shielding, delay before clearing, whether an empty chair counts, veil opacity,
-snooze length, directional sweep. The two angles are a hysteresis band: you must turn past 30°
-to shield and come back within 18° to clear, so a glance at the keyboard does
-not flicker.
+**Settings** (bar widget settings): comfort zone, fully-covered angle,
+whether the veil follows your head or acts as a switch, dwell and release
+(for the switch and for an empty chair), whether an empty chair counts, veil
+opacity, snooze length, directional sweep. Nothing inside the comfort zone
+ever moves the veil, so reading, typing and glancing at the keyboard are
+free.
 
 ### IPC
 

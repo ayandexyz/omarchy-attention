@@ -29,8 +29,9 @@
     "defaults": {
       "enabled": true,
       "offset": 0,
-      "enterAngle": 30,
-      "exitAngle": 18,
+      "enterAngle": 35,
+      "exitAngle": 15,
+      "gradual": true,
       "dwellMs": 350,
       "releaseMs": 200,
       "absentShields": true,
@@ -42,24 +43,31 @@
     },
     "schema": [
       {
-        "key": "enterAngle",
-        "type": "integer",
-        "label": "Shield when turned past (degrees)",
-        "description": "How far your head must turn from straight-ahead before the shield goes up.",
-        "min": 5,
-        "max": 80,
-        "step": 1,
-        "defaultValue": 30
-      },
-      {
         "key": "exitAngle",
         "type": "integer",
-        "label": "Clear when back within (degrees)",
-        "description": "How close to straight-ahead you must come back for it to clear. Keep this well below the shield angle, or a glance at the keyboard flickers.",
+        "label": "Comfort zone (degrees)",
+        "description": "Turn your head this far and nothing happens. Past it the veil starts to come in.",
         "min": 2,
         "max": 80,
         "step": 1,
-        "defaultValue": 18
+        "defaultValue": 15
+      },
+      {
+        "key": "enterAngle",
+        "type": "integer",
+        "label": "Fully covered past (degrees)",
+        "description": "By this angle the whole screen is covered. Between the comfort zone and here the veil advances with your head.",
+        "min": 5,
+        "max": 80,
+        "step": 1,
+        "defaultValue": 35
+      },
+      {
+        "key": "gradual",
+        "type": "boolean",
+        "label": "Veil follows your head",
+        "description": "On: the veil covers more of the screen the further you turn, and comes back as you turn back. Off: it is a switch with a dwell.",
+        "defaultValue": true
       },
       {
         "key": "dwellMs",

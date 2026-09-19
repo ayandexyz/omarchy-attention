@@ -46,17 +46,25 @@ Scope {
   // Why the shield is held down regardless of head pose, or "".
   readonly property string suspended: snoozed ? "snoozed"
     : (settings.suspendFullscreen && fullscreenFocused ? "fullscreen" : "")
-  readonly property bool shielded: covered || (enabled && suspended === "" && state.shielded)
+  // How much of the screen the veil should cover right now, 0..1. In gradual
+  // mode this follows the head; the veil animates toward it.
+  readonly property real coverage: covered ? 1 : (enabled && suspended === "" ? state.coverage : 0)
+  readonly property bool shielded: covered || (enabled && suspended === "" && (state.shielded || state.coverage >= 0.5))
   // Which edge the veil sweeps in from: +1 the right edge (you turned left),
-  // -1 the left edge. Decided when the shield goes up and held until it is
-  // fully down, so the veil leaves the way it came. With no face to read, the
+  // -1 the left edge. Decided as coverage leaves zero and held until it is
+  // back there, so the veil leaves the way it came. With no face to read, the
   // last side you were seen turning toward.
   property int side: 1
   property int lastTurn: 1
-  onShieldedChanged: if (shielded) root.side = root.turnSide()
+  property real _lastCoverage: 0
+  onCoverageChanged: {
+    if (root._lastCoverage === 0 && root.coverage > 0) root.side = root.turnSide()
+    root._lastCoverage = root.coverage
+  }
   function turnSide() {
-    if (root.state.yaw === null) return root.lastTurn
-    return (root.state.yaw - root.offset) < 0 ? -1 : 1
+    var yaw = root.state.smoothYaw !== null ? root.state.smoothYaw : root.state.yaw
+    if (yaw === null) return root.lastTurn
+    return (yaw - root.offset) < 0 ? -1 : 1
   }
   readonly property string label: covered ? "covered" : Shy.describe(state, enabled, suspended)
   readonly property string severity: Shy.severity(state, enabled, suspended)
@@ -205,9 +213,12 @@ Scope {
         // Soft edge, as a fraction of the screen width.
         readonly property real feather: 0.35
         readonly property real featherStop: feather / (1 + feather)
-        property real coverage: root.shielded ? 1 : 0
+        property real coverage: root.coverage
+        // Velocity-based, so a target that keeps moving with the head is
+        // followed smoothly instead of restarting an eased curve on every
+        // 8 fps reading. Covering the whole screen from rest takes ~0.6 s.
         Behavior on coverage {
-          NumberAnimation { duration: veil.sweep ? 550 : 350; easing.type: Easing.InOutCubic }
+          SmoothedAnimation { velocity: 1.6; reversingMode: SmoothedAnimation.Sync }
         }
 
         height: parent.height

@@ -103,8 +103,13 @@ Scope {
     root.nowMs = Date.now()
   }
 
+  // Quickshell's Socket.connected is the *requested* state: it stays true
+  // after a failed or dropped connection, so it cannot be used to decide
+  // whether to (re)connect. Our own view of it is what the daemon last told
+  // us, and a reconnect always goes through false first.
+  readonly property bool linked: root.state.daemon !== "disconnected"
   function connectNow() {
-    if (socket.connected) return
+    socket.connected = false
     socket.path = root.socketPath
     socket.connected = true
   }
@@ -131,14 +136,18 @@ Scope {
     onConnectedChanged: {
       if (!socket.connected) root.state = Logic.disconnected(root.state)
     }
-    onError: function() { /* the reconnect timer handles it */ }
+    onError: function(error) {
+      console.warn("attention socket error " + error + " on " + socket.path)
+      root.state = Logic.disconnected(root.state)
+    }
   }
 
-  // Daemon not up yet, restarted, or started after the shell: keep knocking.
+  // Daemon not up yet, restarted, or started after the shell: keep knocking
+  // until it answers with an event.
   Timer {
     interval: 2000
     repeat: true
-    running: root.enabled && !socket.connected
+    running: root.enabled && !root.linked
     onTriggered: root.connectNow()
   }
 
@@ -169,7 +178,8 @@ Scope {
         enabled: root.enabled, shielded: root.shielded, suspended: root.suspended,
         daemon: root.state.daemon, present: root.state.present,
         yaw: root.state.yaw, pitch: root.state.pitch, offset: root.offset, label: root.label,
-        socket: root.socketPath, fullscreen: root.fullscreenFocused, settings: root.settings, side: root.side, lastTurn: root.lastTurn,
+        socket: root.socketPath, socketConnected: socket.connected, linked: root.linked,
+        fullscreen: root.fullscreenFocused, settings: root.settings, side: root.side, lastTurn: root.lastTurn,
         activeToplevel: ToplevelManager.activeToplevel ? ToplevelManager.activeToplevel.title : null
       })
     }
@@ -197,47 +207,137 @@ Scope {
       // Empty input region: clicks and keys go straight through to whatever
       // is underneath, shield or no shield.
       mask: Region {}
-      // Ask the compositor to blur what is behind the veil. Hyprland honours
-      // this when decoration.blur is enabled; otherwise the veil's own
-      // opacity does the hiding.
-      BackgroundEffect.blurRegion: Region { item: veil }
+      // In Wayland, compositor blur regions are binary geometric masks (on or off).
+      // Rather than cutting the blur arbitrarily inside a translucent smear (which
+      // created a jarring hard line), the blur region precisely bounds the frosted
+      // glass panel. At the leading edge, an Apple-style material structure is
+      // applied:
+      //   1. A forward-facing ambient drop shadow that softly shades the unblurred screen;
+      //   2. A luminous specular glass highlight line and micro-bevel on the rim;
+      //   3. A subtle inner Fresnel glow that eases into the frosted glass veil.
+      // This turns the boundary into a natural, physically convincing optical glass edge.
+      readonly property bool sweep: root.settings.directionalSweep
+      readonly property real coverage: veil.coverage
+      readonly property real shadowWidth: Math.min(48, Math.round(panel.width * 0.035))
 
-      // The veil is wider than the screen by a feathered edge and slides
-      // across it: turn left and it sweeps in from the right, then retreats
-      // back out the same way when you turn back. With `directionalSweep`
-      // off it is a plain fade instead.
+      // The frosted glass panel bounds. The blur region precisely matches
+      // the physical glass pane, while a specular rim and soft ambient shadow
+      // eliminate the raw blur cut and produce a smooth, Apple-like frosted
+      // glass sweep.
+      readonly property int glassLeft: !sweep ? 0
+        : root.side > 0 ? Math.round(panel.width * (1.0 - coverage))
+        : 0
+      readonly property int glassRight: !sweep ? panel.width
+        : root.side > 0 ? panel.width
+        : Math.round(panel.width * coverage)
+      readonly property int glassWidth: Math.max(0, glassRight - glassLeft)
+
+      // Compositor blur region covers the entire frosted glass pane.
+      BackgroundEffect.blurRegion: Region {
+        x: panel.glassLeft
+        y: 0
+        width: panel.glassWidth
+        height: panel.height
+      }
+
+      // 1. Ambient drop shadow cast forward onto the unblurred desktop.
+      // Extends outside the glass pane to create depth and soften the visual lead.
+      Rectangle {
+        id: ambientShadow
+        visible: panel.sweep && panel.glassWidth > 0 && panel.coverage < 0.999
+        y: 0
+        height: panel.height
+        width: panel.shadowWidth
+        x: root.side > 0
+          ? Math.max(0, panel.glassLeft - panel.shadowWidth)
+          : panel.glassRight
+        opacity: Math.min(1.0, panel.coverage * 3.0) * root.settings.veilOpacity
+        gradient: Gradient {
+          orientation: Gradient.Horizontal
+          GradientStop {
+            position: 0.0
+            color: root.side > 0 ? "transparent" : Qt.rgba(0, 0, 0, 0.35)
+          }
+          GradientStop {
+            position: 0.35
+            color: root.side > 0 ? Qt.rgba(0, 0, 0, 0.08) : Qt.rgba(0, 0, 0, 0.20)
+          }
+          GradientStop {
+            position: 0.70
+            color: root.side > 0 ? Qt.rgba(0, 0, 0, 0.20) : Qt.rgba(0, 0, 0, 0.08)
+          }
+          GradientStop {
+            position: 1.0
+            color: root.side > 0 ? Qt.rgba(0, 0, 0, 0.35) : "transparent"
+          }
+        }
+      }
+
+      // 2. The frosted glass veil itself (inside the blur region).
       Rectangle {
         id: veil
         readonly property color tint: Qt.rgba(Color.background.r, Color.background.g, Color.background.b, 1)
-        readonly property bool sweep: root.settings.directionalSweep
-        // Soft edge, as a fraction of the screen width.
-        readonly property real feather: 0.35
-        readonly property real featherStop: feather / (1 + feather)
         property real coverage: root.coverage
-        // Velocity-based, so a target that keeps moving with the head is
-        // followed smoothly instead of restarting an eased curve on every
-        // 8 fps reading. Covering the whole screen from rest takes ~0.6 s.
         Behavior on coverage {
           SmoothedAnimation { velocity: 1.6; reversingMode: SmoothedAnimation.Sync }
         }
 
-        height: parent.height
-        width: sweep ? parent.width * (1 + feather) : parent.width
-        x: !sweep ? 0
-          : root.side > 0 ? parent.width - coverage * width   // in from the right
-          : coverage * width - width                          // in from the left
-        opacity: sweep ? root.settings.veilOpacity : coverage * root.settings.veilOpacity
-        color: sweep ? "transparent" : tint
-        gradient: sweep ? sweepGradient : null
+        y: 0
+        height: panel.height
+        x: panel.glassLeft
+        width: panel.glassWidth
+        opacity: panel.sweep ? root.settings.veilOpacity : coverage * root.settings.veilOpacity
+        color: tint
 
-        Gradient {
-          id: sweepGradient
-          orientation: Gradient.Horizontal
-          // Leading edge is soft, trailing side is solid — whichever way it faces.
-          GradientStop { position: 0; color: root.side > 0 ? "transparent" : veil.tint }
-          GradientStop { position: veil.featherStop; color: root.side > 0 ? veil.tint : veil.tint }
-          GradientStop { position: 1 - veil.featherStop; color: root.side > 0 ? veil.tint : veil.tint }
-          GradientStop { position: 1; color: root.side > 0 ? veil.tint : "transparent" }
+        // Subtle inner Fresnel specular gradient near the leading edge
+        Rectangle {
+          id: innerGlow
+          visible: panel.sweep && panel.glassWidth > 0
+          y: 0
+          height: parent.height
+          width: Math.min(36, panel.glassWidth)
+          x: root.side > 0 ? 0 : parent.width - width
+          gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+              position: 0.0
+              color: root.side > 0 ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+            }
+            GradientStop {
+              position: 1.0
+              color: root.side > 0 ? "transparent" : Qt.rgba(1, 1, 1, 0.12)
+            }
+          }
+        }
+
+        // 3. Apple-style specular glass rim at the leading edge.
+        // A luminous highlight line paired with a subtle contrast bevel gives
+        // the glass a physical, polished optical boundary.
+        Item {
+          id: glassRim
+          visible: panel.sweep && panel.glassWidth > 0 && panel.coverage < 0.999
+          y: 0
+          height: parent.height
+          width: 3
+          x: root.side > 0 ? 0 : parent.width - width
+
+          // Soft micro-shadow bevel
+          Rectangle {
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            x: root.side > 0 ? 0 : 2
+            color: Qt.rgba(0, 0, 0, 0.28)
+          }
+
+          // Luminous specular reflection highlight
+          Rectangle {
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1.5
+            x: root.side > 0 ? 1 : 0
+            color: Qt.rgba(1, 1, 1, 0.35)
+          }
         }
       }
     }

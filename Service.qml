@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
-import "ShyLogic.js" as Shy
+import "AttentionLogic.js" as Logic
 
 // The shield. Lives as a headless service inside omarchy-shell so it exists
 // whether or not the bar widget is showing, subscribes to glanced's attention
@@ -25,7 +25,7 @@ Scope {
   property var shell: null
   property var manifest: null
 
-  property var settings: Shy.normalizeSettings({})
+  property var settings: Logic.normalizeSettings({})
   property bool enabled: true
   // Yaw the user calls "straight at the screen". The camera defines zero, so
   // a webcam off to one side of an ultrawide needs this.
@@ -35,7 +35,7 @@ Scope {
   // and the honest way to demo the thing. Bounded, so it fails open too.
   property double coveredUntil: 0
   property double nowMs: Date.now()
-  property var state: Shy.initial()
+  property var state: Logic.initial()
 
   readonly property bool fullscreenFocused: {
     var top = ToplevelManager.activeToplevel
@@ -66,8 +66,8 @@ Scope {
     if (yaw === null) return root.lastTurn
     return (yaw - root.offset) < 0 ? -1 : 1
   }
-  readonly property string label: covered ? "covered" : Shy.describe(state, enabled, suspended)
-  readonly property string severity: Shy.severity(state, enabled, suspended)
+  readonly property string label: covered ? "covered" : Logic.describe(state, enabled, suspended)
+  readonly property string severity: Logic.severity(state, enabled, suspended)
 
   readonly property string socketPath: {
     // Quickshell.env yields null/undefined for an unset variable, not "".
@@ -78,7 +78,7 @@ Scope {
     return runtime + "/attention.sock"
   }
 
-  function applySettings(raw) { root.settings = Shy.normalizeSettings(raw) }
+  function applySettings(raw) { root.settings = Logic.normalizeSettings(raw) }
   function setEnabled(on) {
     root.enabled = !!on
     if (root.enabled) root.connectNow()
@@ -110,7 +110,7 @@ Scope {
   }
   function disconnectNow() {
     socket.connected = false
-    root.state = Shy.disconnected(root.state)
+    root.state = Logic.disconnected(root.state)
   }
 
   Component.onCompleted: if (root.enabled) root.connectNow()
@@ -121,15 +121,15 @@ Scope {
     parser: SplitParser {
       splitMarker: "\n"
       onRead: function(data) {
-        var event = Shy.parseEvent(data)
+        var event = Logic.parseEvent(data)
         if (event === null) return
-        root.state = Shy.step(root.state, event, Date.now(), root.settings, root.offset)
+        root.state = Logic.step(root.state, event, Date.now(), root.settings, root.offset)
         if (event.yaw !== null && Math.abs(event.yaw - root.offset) > 5)
           root.lastTurn = (event.yaw - root.offset) < 0 ? -1 : 1
       }
     }
     onConnectedChanged: {
-      if (!socket.connected) root.state = Shy.disconnected(root.state)
+      if (!socket.connected) root.state = Logic.disconnected(root.state)
     }
     onError: function() { /* the reconnect timer handles it */ }
   }
@@ -150,13 +150,13 @@ Scope {
     running: root.enabled || root.covered
     onTriggered: {
       root.nowMs = Date.now()
-      var next = Shy.tick(root.state, root.nowMs, root.settings)
+      var next = Logic.tick(root.state, root.nowMs, root.settings)
       if (next !== root.state) root.state = next
     }
   }
 
   IpcHandler {
-    target: "io.github.ayandexyz.shy"
+    target: "io.github.ayandexyz.attention"
     function toggle(): string { root.toggle(); return root.enabled ? "on" : "off" }
     function enable(): string { root.setEnabled(true); return "on" }
     function disable(): string { root.setEnabled(false); return "off" }
@@ -191,7 +191,7 @@ Scope {
       anchors { top: true; bottom: true; left: true; right: true }
       color: "transparent"
       exclusionMode: ExclusionMode.Ignore
-      WlrLayershell.namespace: "omarchy-shy"
+      WlrLayershell.namespace: "omarchy-attention"
       WlrLayershell.layer: WlrLayer.Overlay
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       // Empty input region: clicks and keys go straight through to whatever

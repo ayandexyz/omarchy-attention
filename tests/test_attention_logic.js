@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Unit tests for ShyLogic.js: the shield's state machine, driven by a scripted
+// Unit tests for AttentionLogic.js: the shield's state machine, driven by a scripted
 // event stream and a fake clock. The file is a QML `.pragma library`, so it is
 // loaded by stripping that line and evaluating it as plain script.
 "use strict"
@@ -8,7 +8,7 @@ const path = require("path")
 const vm = require("vm")
 const assert = require("assert")
 
-const source = fs.readFileSync(path.join(__dirname, "..", "ShyLogic.js"), "utf8")
+const source = fs.readFileSync(path.join(__dirname, "..", "AttentionLogic.js"), "utf8")
   .replace(/^\.pragma library\s*$/m, "")
 const S = vm.runInNewContext(source + "\n;({ DEFAULTS, normalizeSettings, parseEvent, initial, classify, step, tick, disconnected, describe, severity, coverageFor })")
 

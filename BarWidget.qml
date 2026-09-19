@@ -6,7 +6,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui as Ui
 
-// Bar icon + panel for the Shy service. The service does the work; this is
+// Bar icon + panel for the Attention service. The service does the work; this is
 // the switch, the recentre button, and a readout of what the daemon sees.
 //
 // Settings live on this widget's bar entry (the schema in manifest.json) and
@@ -14,8 +14,8 @@ import qs.Ui as Ui
 // moments before the widget has loaded.
 Ui.Panel {
   id: root
-  moduleName: "io.github.ayandexyz.shy"
-  ipcTarget: "io.github.ayandexyz.shy.panel"
+  moduleName: "io.github.ayandexyz.attention"
+  ipcTarget: "io.github.ayandexyz.attention.panel"
   manageIpc: false
 
   // Injected by the shell: the scoped API that can find our own service.
@@ -119,7 +119,7 @@ Ui.Panel {
     bar: root.bar
     text: root.enabled ? "󰈈" : "󰈉"
     active: root.shielded
-    tooltipText: "Shy · " + root.label
+    tooltipText: "Attention · " + root.label
     onPressed: function(buttonCode) { root.handleBarPress(buttonCode) }
   }
 
@@ -148,7 +148,7 @@ Ui.Panel {
           width: parent.width
           foreground: root.foreground
           fontFamily: root.fontFamily
-          title: "Shy"
+          title: "Attention"
           meta: root.label
           detail: root.enabled ? (root.shielded ? "shielded" : "") : "off"
           iconComponent: Component {

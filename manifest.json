@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.ayandexyz.shy",
-  "name": "Shy",
+  "id": "io.github.ayandexyz.attention",
+  "name": "Attention",
   "version": "0.1.0",
   "author": "Ayan De",
   "license": "MIT",
-  "homepage": "https://github.com/ayandexyz/omarchy-shy",
+  "homepage": "https://github.com/ayandexyz/omarchy-attention",
   "description": "Privacy shield: the screen blurs when you look away from it and clears when you look back, driven by the glanced daemon's head-pose stream. No screen capture, no input grabbing, fails open.",
   "kinds": [
     "service",
@@ -17,10 +17,11 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Shy",
+    "displayName": "Attention",
     "description": "Toggle the look-away privacy shield, recentre it for your camera, snooze it, and see what the daemon sees.",
     "category": "System",
     "aliases": [
+      "attention",
       "shy",
       "privacy-shield"
     ],

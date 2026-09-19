@@ -1,4 +1,4 @@
-# omarchy-shy
+# omarchy-attention
 
 Look away from your screen and it blurs. Look back and it clears.
 
@@ -50,7 +50,7 @@ glancectl attention                  # should print yaw/pitch lines; Ctrl-C
 Then the plugin:
 
 ```bash
-omarchy plugin add https://github.com/ayandexyz/omarchy-shy.git --enable
+omarchy plugin add https://github.com/ayandexyz/omarchy-attention.git --enable
 ```
 
 An eye appears in the bar. Turn your head past 15° and the veil starts to
@@ -75,9 +75,9 @@ GPU on every transparent window, not just this one, so it is your call.
 Plugins cannot bind keys, so in `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER + SHIFT + S", "Shy: toggle",   "omarchy-shell io.github.ayandexyz.shy toggle")
-o.bind("SUPER + SHIFT + C", "Shy: recentre", "omarchy-shell io.github.ayandexyz.shy recenter")
-o.bind("SUPER + SHIFT + X", "Shy: cover now", "omarchy-shell io.github.ayandexyz.shy cover 30")
+o.bind("SUPER + SHIFT + S", "Attention: toggle",   "omarchy-shell io.github.ayandexyz.attention toggle")
+o.bind("SUPER + SHIFT + C", "Attention: recentre", "omarchy-shell io.github.ayandexyz.attention recenter")
+o.bind("SUPER + SHIFT + X", "Attention: cover now", "omarchy-shell io.github.ayandexyz.attention cover 30")
 ```
 
 `cover` is the panic key: veil up for N seconds regardless of where you are
@@ -110,25 +110,25 @@ free.
 ### IPC
 
 ```
-omarchy-shell io.github.ayandexyz.shy toggle|enable|disable
-omarchy-shell io.github.ayandexyz.shy recenter
-omarchy-shell io.github.ayandexyz.shy snooze [seconds]
-omarchy-shell io.github.ayandexyz.shy wake
-omarchy-shell io.github.ayandexyz.shy cover [seconds]
-omarchy-shell io.github.ayandexyz.shy state      # JSON: what it sees and why
+omarchy-shell io.github.ayandexyz.attention toggle|enable|disable
+omarchy-shell io.github.ayandexyz.attention recenter
+omarchy-shell io.github.ayandexyz.attention snooze [seconds]
+omarchy-shell io.github.ayandexyz.attention wake
+omarchy-shell io.github.ayandexyz.attention cover [seconds]
+omarchy-shell io.github.ayandexyz.attention state      # JSON: what it sees and why
 ```
 
 ## How it works
 
 ```
 glanced ──attention.sock──▶ Service.qml ──▶ one PanelWindow per output
- 8 fps    {present,yaw,pitch}   ShyLogic.js     overlay layer, empty input
+ 8 fps    {present,yaw,pitch}   AttentionLogic.js     overlay layer, empty input
  landmarker only               hysteresis +      region, compositor blur,
                                dwell + watchdog  opacity ramp
 ```
 
 `Service.qml` is a headless service plugin: it holds the socket, runs the
-state machine in `ShyLogic.js`, and owns the veil surfaces. `BarWidget.qml`
+state machine in `AttentionLogic.js`, and owns the veil surfaces. `BarWidget.qml`
 is the switch and the readout; the shield works without it showing.
 
 Only the daemon's `tracking` state means anything. `starting`, `paused` (an

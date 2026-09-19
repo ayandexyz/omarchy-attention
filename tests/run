@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+plugin_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+echo "== ShyLogic unit tests =="
+node "$plugin_root/tests/test_shy_logic.js"
+
+echo
+echo "== manifest contract =="
+if command -v omarchy >/dev/null 2>&1; then
+  omarchy plugin validate "$plugin_root"
+  echo "omarchy plugin validate: passed"
+else
+  echo "omarchy not installed; skipped"
+fi
+
+echo
+echo "== qmllint =="
+# Advisory: the qmllint shipped on some Omarchy installs exits non-zero without
+# printing anything, so only actual messages are treated as findings.
+shell_root=${OMARCHY_PATH:-/usr/share/omarchy}/shell
+if command -v qmllint >/dev/null 2>&1 && [[ -d $shell_root ]]; then
+  lint_output=$(qmllint -I "$shell_root" "$plugin_root/Service.qml" "$plugin_root/BarWidget.qml" 2>&1 || true)
+  if [[ -n $lint_output ]]; then
+    echo "$lint_output"
+    if grep -qi "error" <<<"$lint_output"; then exit 1; fi
+  fi
+  echo "qmllint: no findings"
+else
+  echo "qmllint or the Omarchy shell not available; skipped"
+fi
+
+echo
+echo "== live (only if the shell has the plugin loaded) =="
+if command -v omarchy-shell >/dev/null 2>&1 && omarchy-shell io.github.ayandexyz.shy ping 2>/dev/null | grep -q ok; then
+  state=$(omarchy-shell io.github.ayandexyz.shy state)
+  echo "$state"
+  python3 - "$state" <<'PY'
+import json, sys
+s = json.loads(sys.argv[1])
+assert s["socket"].endswith("/glance/attention.sock"), s["socket"]
+print("service reachable; daemon:", s["daemon"])
+PY
+else
+  echo "plugin not loaded in a running shell; skipped"
+fi
+
+echo
+echo "all tests passed"

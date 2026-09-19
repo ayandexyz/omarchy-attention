@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.ayandexyz.shy",
+  "name": "Shy",
+  "version": "0.1.0",
+  "author": "Ayan De",
+  "license": "MIT",
+  "homepage": "https://github.com/ayandexyz/omarchy-shy",
+  "description": "Privacy shield: the screen blurs when you look away from it and clears when you look back, driven by the glanced daemon's head-pose stream. No screen capture, no input grabbing, fails open.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": false,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Shy",
+    "description": "Toggle the look-away privacy shield, recentre it for your camera, snooze it, and see what the daemon sees.",
+    "category": "System",
+    "aliases": [
+      "shy",
+      "privacy-shield"
+    ],
+    "defaultSection": "right",
+    "allowMultiple": false,
+    "defaults": {
+      "enabled": true,
+      "offset": 0,
+      "enterAngle": 30,
+      "exitAngle": 18,
+      "dwellMs": 350,
+      "releaseMs": 200,
+      "absentShields": true,
+      "absentDwellMs": 2000,
+      "suspendFullscreen": true,
+      "veilOpacity": 0.92,
+      "snoozeSeconds": 300
+    },
+    "schema": [
+      {
+        "key": "enterAngle",
+        "type": "integer",
+        "label": "Shield when turned past (degrees)",
+        "description": "How far your head must turn from straight-ahead before the shield goes up.",
+        "min": 5,
+        "max": 80,
+        "step": 1,
+        "defaultValue": 30
+      },
+      {
+        "key": "exitAngle",
+        "type": "integer",
+        "label": "Clear when back within (degrees)",
+        "description": "How close to straight-ahead you must come back for it to clear. Keep this well below the shield angle, or a glance at the keyboard flickers.",
+        "min": 2,
+        "max": 80,
+        "step": 1,
+        "defaultValue": 18
+      },
+      {
+        "key": "dwellMs",
+        "type": "integer",
+        "label": "Dwell before shielding (ms)",
+        "description": "How long you must stay turned away before the shield engages.",
+        "min": 0,
+        "max": 5000,
+        "step": 50,
+        "defaultValue": 350
+      },
+      {
+        "key": "releaseMs",
+        "type": "integer",
+        "label": "Delay before clearing (ms)",
+        "min": 0,
+        "max": 5000,
+        "step": 50,
+        "defaultValue": 200
+      },
+      {
+        "key": "absentShields",
+        "type": "boolean",
+        "label": "Shield when nobody is there",
+        "description": "Walking away from the desk counts as looking away.",
+        "defaultValue": true
+      },
+      {
+        "key": "absentDwellMs",
+        "type": "integer",
+        "label": "Dwell before shielding an empty chair (ms)",
+        "min": 0,
+        "max": 30000,
+        "step": 250,
+        "defaultValue": 2000
+      },
+      {
+        "key": "suspendFullscreen",
+        "type": "boolean",
+        "label": "Never shield over a fullscreen window",
+        "description": "Presentations, films, games: you will turn your head, and the screen should not care.",
+        "defaultValue": true
+      },
+      {
+        "key": "veilOpacity",
+        "type": "number",
+        "label": "Veil opacity",
+        "description": "How solid the veil is. With Hyprland blur enabled this can sit lower; without it, this alone hides the screen.",
+        "min": 0.2,
+        "max": 1,
+        "step": 0.02,
+        "defaultValue": 0.92
+      },
+      {
+        "key": "snoozeSeconds",
+        "type": "integer",
+        "label": "Snooze length (seconds)",
+        "min": 10,
+        "max": 86400,
+        "step": 10,
+        "defaultValue": 300
+      }
+    ]
+  }
+}

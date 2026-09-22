@@ -41,6 +41,9 @@ your screen is a frosted blur until you turn back.
 You need `glanced` 0.3 or later (the release with `attention.sock`) running
 as your user:
 
+`pipx` comes from `python-pipx` (`sudo pacman -S python-pipx`). Attention mode
+needs nothing else: no compiler, no PAM, no enrolling.
+
 ```bash
 pipx install 'glanced[runtime]'
 glancectl install-service            # fetches the models, writes the unit, starts it

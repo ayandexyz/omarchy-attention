@@ -43,8 +43,7 @@ as your user:
 
 ```bash
 pipx install 'glanced[runtime]'
-glancectl fetch-model                # ~16MB, downloads both networks
-glancectl install-service            # writes the user unit, enables it
+glancectl install-service            # fetches the models, writes the unit, starts it
 ```
 
 That is the daemon only. Attention mode uses the landmarker alone, so you do

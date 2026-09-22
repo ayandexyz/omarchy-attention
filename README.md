@@ -38,12 +38,11 @@ your screen is a frosted blur until you turn back.
 
 ## Install
 
-You need `glanced` running as your user, built from a source checkout.
-`attention.sock` is not in a tagged release yet and there is no AUR package,
-so this is the only path for now:
+You need `glanced` 0.3 or later (the release with `attention.sock`) running
+as your user. There is no AUR package, so it goes in from a checkout:
 
 ```bash
-git clone https://github.com/ayandexyz/glance-linux.git
+git clone --branch v0.3.0 https://github.com/ayandexyz/glance-linux.git
 cd glance-linux
 python -m venv .venv && .venv/bin/pip install -e '.[runtime]'
 .venv/bin/glancectl fetch-model      # ~16MB, downloads both networks

@@ -103,42 +103,65 @@ Scope {
     root.nowMs = Date.now()
   }
 
-  // Quickshell's Socket.connected is the *requested* state: it stays true
-  // after a failed or dropped connection, so it cannot be used to decide
-  // whether to (re)connect. Our own view of it is what the daemon last told
-  // us, and a reconnect always goes through false first.
+  // Whether the daemon has actually told us something. Not the same as having
+  // a socket: a connection can be open while the daemon has yet to speak.
   readonly property bool linked: root.state.daemon !== "disconnected"
+
+  // A Socket is never reused. Quickshell keeps a failed socket in place
+  // instead of discarding it, so once a connection attempt fails that object
+  // can never connect again -- toggling `connected` or reassigning `path` are
+  // both no-ops from then on (quickshell-mirror/quickshell#1180). Since the
+  // shell and glanced are started by the same session target with no ordering
+  // between them, losing that race by a second would otherwise leave the
+  // shield down for the entire session. Every attempt therefore gets a new
+  // object, which is the one thing that does reconnect.
+  property var socket: null
+
   function connectNow() {
-    socket.connected = false
-    socket.path = root.socketPath
-    socket.connected = true
+    root.dropSocket()
+    root.socket = socketComponent.createObject(root, { path: root.socketPath })
+  }
+  function dropSocket() {
+    if (root.socket === null) return
+    var dead = root.socket
+    // Cleared first so the handlers below ignore anything this one emits on
+    // its way out and cannot clobber a newer connection's state.
+    root.socket = null
+    dead.connected = false
+    dead.destroy()
   }
   function disconnectNow() {
-    socket.connected = false
+    root.dropSocket()
     root.state = Logic.disconnected(root.state)
   }
 
   Component.onCompleted: if (root.enabled) root.connectNow()
 
-  Socket {
-    id: socket
-    path: root.socketPath
-    parser: SplitParser {
-      splitMarker: "\n"
-      onRead: function(data) {
-        var event = Logic.parseEvent(data)
-        if (event === null) return
-        root.state = Logic.step(root.state, event, Date.now(), root.settings, root.offset)
-        if (event.yaw !== null && Math.abs(event.yaw - root.offset) > 5)
-          root.lastTurn = (event.yaw - root.offset) < 0 ? -1 : 1
+  Component {
+    id: socketComponent
+
+    Socket {
+      id: sock
+      connected: true
+      parser: SplitParser {
+        splitMarker: "\n"
+        onRead: function(data) {
+          if (root.socket !== sock) return
+          var event = Logic.parseEvent(data)
+          if (event === null) return
+          root.state = Logic.step(root.state, event, Date.now(), root.settings, root.offset)
+          if (event.yaw !== null && Math.abs(event.yaw - root.offset) > 5)
+            root.lastTurn = (event.yaw - root.offset) < 0 ? -1 : 1
+        }
       }
-    }
-    onConnectedChanged: {
-      if (!socket.connected) root.state = Logic.disconnected(root.state)
-    }
-    onError: function(error) {
-      console.warn("attention socket error " + error + " on " + socket.path)
-      root.state = Logic.disconnected(root.state)
+      onConnectedChanged: {
+        if (root.socket === sock && !sock.connected) root.state = Logic.disconnected(root.state)
+      }
+      onError: function(error) {
+        if (root.socket !== sock) return
+        console.warn("attention socket error " + error + " on " + sock.path)
+        root.state = Logic.disconnected(root.state)
+      }
     }
   }
 
@@ -147,7 +170,7 @@ Scope {
   Timer {
     interval: 2000
     repeat: true
-    running: root.enabled && !root.linked
+    running: root.enabled && (root.socket === null || !root.socket.connected)
     onTriggered: root.connectNow()
   }
 
@@ -178,7 +201,7 @@ Scope {
         enabled: root.enabled, shielded: root.shielded, suspended: root.suspended,
         daemon: root.state.daemon, present: root.state.present,
         yaw: root.state.yaw, pitch: root.state.pitch, offset: root.offset, label: root.label,
-        socket: root.socketPath, socketConnected: socket.connected, linked: root.linked,
+        socket: root.socketPath, socketConnected: root.socket !== null && root.socket.connected, linked: root.linked,
         fullscreen: root.fullscreenFocused, settings: root.settings, side: root.side, lastTurn: root.lastTurn,
         activeToplevel: ToplevelManager.activeToplevel ? ToplevelManager.activeToplevel.title : null
       })

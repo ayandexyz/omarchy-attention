@@ -46,4 +46,49 @@ else
 fi
 
 echo
+echo "== reconnect after a failed first connect =="
+# The shield must recover when it loses the startup race with glanced. See the
+# commit that added this, and quickshell-mirror/quickshell#1180: a Quickshell
+# Socket whose first connection attempt fails can never be reconnected, so a
+# reconnect has to build a new one. Without that fix this test hangs on
+# "disconnected" for the whole run.
+commons=$shell_root/Commons
+if ! command -v quickshell >/dev/null 2>&1; then
+  echo "quickshell not installed; skipped"
+elif [[ ! -d $commons ]]; then
+  echo "the Omarchy shell's Commons module is not available; skipped"
+elif [[ -z ${WAYLAND_DISPLAY:-} ]]; then
+  echo "no Wayland session (PanelWindow needs a backend); skipped"
+else
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  mkdir -p "$work/harness" "$work/run"
+  ln -s "$commons" "$work/harness/Commons"
+  ln -s "$plugin_root" "$work/harness/Plugin"
+  cp "$plugin_root/tests/reconnect/harness.qml" "$work/harness/shell.qml"
+
+  # The socket appears three seconds in, well after the shell has tried and
+  # failed to connect to it.
+  python3 "$plugin_root/tests/reconnect/fake_daemon.py" "$work/run/attention.sock" 3 \
+    >"$work/daemon.log" 2>&1 &
+  daemon_pid=$!
+
+  probe=$(GLANCE_RUNTIME_DIR="$work/run" timeout 20 quickshell -p "$work/harness/shell.qml" 2>&1 |
+    grep -E "^.*PROBE" || true)
+  kill "$daemon_pid" 2>/dev/null || true
+  wait "$daemon_pid" 2>/dev/null || true
+
+  if [[ -z $probe ]]; then
+    echo "the harness produced no output; is Service.qml loadable?" >&2
+    exit 1
+  fi
+  if ! grep -q "daemon=tracking" <<<"$probe"; then
+    echo "$probe" | tail -5 >&2
+    echo "never reconnected after the daemon appeared" >&2
+    exit 1
+  fi
+  echo "reconnected once the daemon appeared"
+fi
+
+echo
 echo "all tests passed"

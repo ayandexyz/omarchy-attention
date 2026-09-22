@@ -38,12 +38,25 @@ your screen is a frosted blur until you turn back.
 
 ## Install
 
-You need `glanced` 0.3 or later (the version with `attention.sock`) running
-as your user:
+You need `glanced` running as your user, built from a source checkout.
+`attention.sock` is not in a tagged release yet and there is no AUR package,
+so this is the only path for now:
 
 ```bash
-yay -S glanced                       # or a source checkout, see its README
-systemctl --user enable --now glanced
+git clone https://github.com/ayandexyz/glance-linux.git
+cd glance-linux
+python -m venv .venv && .venv/bin/pip install -e '.[runtime]'
+.venv/bin/glancectl fetch-model      # ~16MB, downloads both networks
+packaging/install.sh --no-plugin     # installs, enables and starts the service
+```
+
+`--no-plugin` skips the face unlock bar plugin. Attention mode uses the
+landmarker alone, so you do not need to enroll, arm, or touch PAM — drop the
+flag if you want face unlock too, and follow that project's README.
+
+Check the stream before going further:
+
+```bash
 glancectl attention                  # should print yaw/pitch lines; Ctrl-C
 ```
 

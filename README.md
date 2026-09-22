@@ -39,19 +39,17 @@ your screen is a frosted blur until you turn back.
 ## Install
 
 You need `glanced` 0.3 or later (the release with `attention.sock`) running
-as your user. There is no AUR package, so it goes in from a checkout:
+as your user:
 
 ```bash
-git clone --branch v0.3.0 https://github.com/ayandexyz/glance-linux.git
-cd glance-linux
-python -m venv .venv && .venv/bin/pip install -e '.[runtime]'
-.venv/bin/glancectl fetch-model      # ~16MB, downloads both networks
-packaging/install.sh --no-plugin     # installs, enables and starts the service
+pipx install 'glanced[runtime]'
+glancectl fetch-model                # ~16MB, downloads both networks
+glancectl install-service            # writes the user unit, enables it
 ```
 
-`--no-plugin` skips the face unlock bar plugin. Attention mode uses the
-landmarker alone, so you do not need to enroll, arm, or touch PAM — drop the
-flag if you want face unlock too, and follow that project's README.
+That is the daemon only. Attention mode uses the landmarker alone, so you do
+not need to enroll, arm, or touch PAM — add face unlock later from that
+project's README if you want it.
 
 Check the stream before going further:
 

@@ -45,9 +45,12 @@ as your user:
 needs nothing else: no compiler, no PAM, no enrolling.
 
 ```bash
-pipx install 'glanced[runtime]'
+pipx install 'glanced[runtime]==0.3.4'
 glancectl install-service            # fetches the models, writes the unit, starts it
 ```
+
+The version is pinned so you get the release this was tested against rather
+than whatever PyPI is serving today; later 0.3.x releases work too.
 
 That is the daemon only. Attention mode uses the landmarker alone, so you do
 not need to enroll, arm, or touch PAM — add face unlock later from that

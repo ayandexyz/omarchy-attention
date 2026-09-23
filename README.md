@@ -95,6 +95,34 @@ o.bind("SUPER + SHIFT + X", "Attention: cover now", "omarchy-shell io.github.aya
 `cover` is the panic key: veil up for N seconds regardless of where you are
 looking, then it fails open like everything else.
 
+## Removing it
+
+```bash
+omarchy plugin remove io.github.ayandexyz.attention
+```
+
+That takes the bar widget, the service and the settings with it, and the veil
+goes with them — there is no leftover surface, no unit, and nothing written
+outside the plugin folder and your bar entry.
+
+Two things you added by hand, if you added them: the three lines in
+`~/.config/hypr/bindings.lua`, and the blur line in
+`~/.config/hypr/looknfeel.lua`. Blur is a Hyprland setting rather than
+something this plugin owns, so keep it if you like what it does elsewhere.
+
+`glanced` is a separate project and stays. To take the daemon out as well:
+
+```bash
+systemctl --user disable --now glanced
+rm ~/.config/systemd/user/glanced.service
+pipx uninstall glanced
+```
+
+`~/.local/share/glance` holds the downloaded models — and, if you went on to
+set up face unlock, your enrolled face. Delete it only if you mean to lose
+that too, and undo the PAM setup first if you wired it up, or you can lock
+yourself out of the lock screen.
+
 ## Using it
 
 | Bar icon | |

@@ -1,1 +1,4 @@
+# Screenshots taken while working on the veil; they are never worth committing.
 *.png
+# Except the marketplace preview, which is.
+!preview.png

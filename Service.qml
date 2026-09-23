@@ -69,13 +69,21 @@ Scope {
   readonly property string label: covered ? "covered" : Logic.describe(state, enabled, suspended)
   readonly property string severity: Logic.severity(state, enabled, suspended)
 
+  // The daemon's socket, or "" when this session has no runtime directory to
+  // look in. There is deliberately no guessed fallback: /run/user/1000 is
+  // only this user's runtime directory when this user happens to be uid 1000,
+  // and on any other uid it is somebody else's — the shield would be taking
+  // its pose readings, and its idea of who is at the desk, from another
+  // account's daemon. Without a runtime directory there is nothing legitimate
+  // to connect to, and no connection means no veil, which is the direction
+  // everything else here fails in too.
   readonly property string socketPath: {
     // Quickshell.env yields null/undefined for an unset variable, not "".
     var explicit = Quickshell.env("GLANCE_RUNTIME_DIR")
+    if (typeof explicit === "string" && explicit !== "") return explicit + "/attention.sock"
     var runtimeDir = Quickshell.env("XDG_RUNTIME_DIR")
-    var runtime = typeof explicit === "string" && explicit !== "" ? explicit
-      : (typeof runtimeDir === "string" && runtimeDir !== "" ? runtimeDir : "/run/user/1000") + "/glance"
-    return runtime + "/attention.sock"
+    if (typeof runtimeDir === "string" && runtimeDir !== "") return runtimeDir + "/glance/attention.sock"
+    return ""
   }
 
   function applySettings(raw) { root.settings = Logic.normalizeSettings(raw) }
@@ -119,6 +127,7 @@ Scope {
 
   function connectNow() {
     root.dropSocket()
+    if (root.socketPath === "") return
     root.socket = socketComponent.createObject(root, { path: root.socketPath })
   }
   function dropSocket() {
@@ -170,7 +179,7 @@ Scope {
   Timer {
     interval: 2000
     repeat: true
-    running: root.enabled && (root.socket === null || !root.socket.connected)
+    running: root.enabled && root.socketPath !== "" && (root.socket === null || !root.socket.connected)
     onTriggered: root.connectNow()
   }
 

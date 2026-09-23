@@ -113,6 +113,11 @@ Ui.Panel {
     function toggle(): void { root.toggle() }
   }
 
+  // `label` can carry the daemon's own state name for a state this plugin
+  // does not know. The tooltip and PanelHero below are the shell's own
+  // components, so their text format is not ours to set — which is why that
+  // string is stripped and bounded as it comes off the socket, in
+  // AttentionLogic.sanitizeText, rather than only at the sinks here.
   Ui.BarIconButton {
     id: iconButton
     anchors.fill: parent
@@ -157,6 +162,7 @@ Ui.Panel {
               color: root.severityColor(root.severity)
               font.family: root.fontFamily
               font.pixelSize: Style.font.display
+              textFormat: Text.PlainText
             }
           }
         }
@@ -168,6 +174,7 @@ Ui.Panel {
           text: "Cannot reach glanced's attention socket. Install the glanced package (0.3 or later) and start it: systemctl --user start glanced"
           color: root.dim
           wrapMode: Text.WordWrap
+          textFormat: Text.PlainText
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
         }
@@ -230,6 +237,7 @@ Ui.Panel {
             }
             color: root.foreground
             wrapMode: Text.WordWrap
+            textFormat: Text.PlainText
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -240,6 +248,7 @@ Ui.Panel {
               + (root.service && root.service.offset !== 0 ? ", centre at " + root.service.offset.toFixed(0) + "°" : "")
             color: root.dim
             wrapMode: Text.WordWrap
+            textFormat: Text.PlainText
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
           }
@@ -249,6 +258,7 @@ Ui.Panel {
             text: root.live ? root.live.reason : ""
             color: root.dim
             wrapMode: Text.WordWrap
+            textFormat: Text.PlainText
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
           }
@@ -259,6 +269,7 @@ Ui.Panel {
           text: "Right-click the icon to toggle, middle-click to recentre. Nothing here captures your screen or your camera: the daemon sends two angles and a bool, and the veil takes no input."
           color: root.dim
           wrapMode: Text.WordWrap
+          textFormat: Text.PlainText
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
         }

@@ -74,6 +74,28 @@ function normalizeSettings(raw) {
   return s
 }
 
+// Longest daemon-supplied string the UI will carry. Nothing legitimate on
+// this socket is near it; the point is that the bar tooltip cannot be made
+// arbitrarily long by whatever is on the other end.
+var MAX_TEXT = 120
+
+// The daemon's own strings (its state name, its reason) end up in the bar
+// tooltip and the panel. Qt's default Text.AutoText renders anything that
+// looks like markup, so every sink in BarWidget.qml pins Text.PlainText;
+// this is the same fence at the other end, where the string arrives. Control
+// characters out, length bounded, so nothing downstream has to trust the
+// socket for markup or for size.
+function sanitizeText(value) {
+  if (typeof value !== "string") return ""
+  var out = ""
+  for (var i = 0; i < value.length && out.length < MAX_TEXT; i++) {
+    var code = value.charCodeAt(i)
+    if (code < 0x20 || code === 0x7f) continue
+    out += value.charAt(i)
+  }
+  return out
+}
+
 // One line off the socket -> an event, or null for anything that is not a
 // well-formed schema-1 attention event. Unknown schemas are dropped rather
 // than guessed at: a wrong yaw is worse than no yaw.
@@ -86,11 +108,11 @@ function parseEvent(line) {
   var yaw = typeof data.yaw === "number" && isFinite(data.yaw) ? data.yaw : null
   var pitch = typeof data.pitch === "number" && isFinite(data.pitch) ? data.pitch : null
   return {
-    state: data.state,
+    state: sanitizeText(data.state),
     present: data.present === true,
     yaw: yaw,
     pitch: pitch,
-    reason: typeof data.reason === "string" ? data.reason : ""
+    reason: sanitizeText(data.reason)
   }
 }
 

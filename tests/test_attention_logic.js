@@ -55,6 +55,35 @@ test("parses a schema-1 event and rejects anything else", () => {
   assert.strictEqual(paused.reason, "unlock scan in progress")
 })
 
+test("daemon strings are stripped and bounded before the UI sees them", () => {
+  // Everything the daemon says about itself reaches a bar tooltip. The sinks
+  // pin Text.PlainText; this is the other half of that fence.
+  const markup = S.parseEvent(
+    '{"schemaVersion":1,"state":"error","reason":"<img src=\'https://example.invalid/x.png\'>"}')
+  assert.strictEqual(markup.reason.indexOf("\n"), -1)
+  assert.strictEqual(markup.reason.length <= 120, true)
+
+  // Written as JSON escapes: a raw control character is not valid JSON, so the
+  // daemon would have to send them exactly like this to get them to us.
+  const control = S.parseEvent('{"schemaVersion":1,"state":"error","reason":"a\\u0000b\\u001bc\\u007fd"}')
+  assert.strictEqual(control.reason, "abcd")
+
+  const long = S.parseEvent(JSON.stringify(
+    { schemaVersion: 1, state: "error", reason: "x".repeat(5000) }))
+  assert.strictEqual(long.reason.length, 120)
+
+  // A state name this plugin does not know still falls through to the tooltip,
+  // so it is bounded too — and it must stay usable as a state name.
+  const unknown = S.parseEvent(JSON.stringify(
+    { schemaVersion: 1, state: "z".repeat(400) }))
+  assert.strictEqual(unknown.state.length, 120)
+  assert.strictEqual(S.describe(S.step(S.initial(), unknown, 0, settings, 0), true, "").length <= 120, true)
+
+  // And the ordinary case is untouched.
+  assert.strictEqual(
+    S.parseEvent('{"schemaVersion":1,"state":"tracking","reason":"camera ok"}').reason, "camera ok")
+})
+
 test("settings: defaults fill gaps, exit always sits inside enter", () => {
   assert.strictEqual(S.normalizeSettings({}).enterAngle, S.DEFAULTS.enterAngle)
   assert.strictEqual(S.normalizeSettings({ enterAngle: "garbage" }).enterAngle, S.DEFAULTS.enterAngle)
